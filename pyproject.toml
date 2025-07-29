@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "wow-fishing-classic"
+version = "1.0.0"
+description = ""
+authors = ["Maximilian Neudert <max@neudert.me>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+torch = "^2.7"
+torchvision = "^0.22"
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^9.4"
+ipykernel = "^6.30"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
