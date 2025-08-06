@@ -1,0 +1,7 @@
+path: wow-fishing-classic
+train: images/train
+val: images/val
+
+names:
+  0: fish
+  1: no-fish
