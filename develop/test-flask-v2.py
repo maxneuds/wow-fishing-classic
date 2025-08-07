@@ -2,7 +2,7 @@ import threading
 import time
 import secrets
 from pynput.mouse import Button, Controller
-from flask import Flask, render_template_string, request, session, jsonify
+from flask import Flask, render_template_string, request, jsonify
 
 
 app = Flask(__name__)
@@ -33,7 +33,7 @@ def index():
         <html lang="en">
         <head>
             <meta charset="UTF-8">
-            <title>flask-webapp</title>
+            <title>WoW Fisherman - Classic</title>
             <link rel="icon" type="image/svg+xml" href="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg">
             <style>
                 body {
