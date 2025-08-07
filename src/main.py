@@ -1,12 +1,10 @@
 import mss
 import numpy as np
-import cv2 as cv
 import json
 import os
 import torch
 import time
 import threading
-import secrets
 import win32gui
 from ultralytics import YOLO
 from pynput.mouse import Controller as mouse_controller, Button
@@ -14,10 +12,19 @@ from pynput.keyboard import KeyCode, Controller as kb_controller
 from random import randint
 from logger import logger
 from pynput import keyboard
+import argparse
 
 
-WINDOW_NAME = 'World of Warcraft'
-MAX_WAIT_TIME = 22
+YOLO_VERSION = "yolo11m"  # or "yolo11s"
+DIR_MODELS = "models"
+BTN_FISHING = "\\"  # Keybind to start fishing
+MAX_WAIT_TIME = 25
+
+parser = argparse.ArgumentParser(description="WoW Fishing Bot")
+parser.add_argument("-v", "--version", choices=["classic", "retail"], default="classic", help="WoW version: classic or retail (default: classic)")
+args = parser.parse_args()
+wow_version = args.version
+logger.info(f"Selected WoW version: {wow_version}")
 
 # Check if ROCm-compatible GPU is available
 logger.info(f"PyTorch version: {torch.__version__}")
@@ -34,7 +41,7 @@ with open("config.json", "r") as f:
     config = json.load(f)
 os.chdir(config["workdir"])
 
-model = YOLO("models/yolo11s-wow-fishing-classic.pt")
+model = YOLO(os.path.join(DIR_MODELS, f"{YOLO_VERSION}-wow-fishing-{wow_version}.pt"))
 model.to("cuda" if torch.cuda.is_available() else "cpu")
 
 mouse = mouse_controller()
@@ -80,53 +87,30 @@ def worker():
                 "left": left + border_left,
                 "width": right - left - border_left - border_right,
                 "height": bottom - top - titlebar_height - border_bottom,}
-            try:
-                while is_running:
-                    logger.info("Start fishing...")
-                    kb_click(KeyCode.from_char('\\'))
-                    detect = False
-                    start_time = time.time()
-                    while is_running and not detect:
-                        if time.time() - start_time > MAX_WAIT_TIME:
-                            logger.error(f"No detection after {MAX_WAIT_TIME} seconds: try again.")
-                            break
-                        img = np.array(sct.grab(window_game))[:, :, :3]
-                        results = model(img, verbose=False)
-                        for box in results[0].boxes:
-                            cls = int(box.cls[0])
-                            conf = float(box.conf[0])
-                            x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            if cls == 0 and conf > 0.75:
-                                detect = True
-                                logger.info(f"Detected fish with {conf*100:.0f}% at [{x1}, {y1}, {x2}, {y2}]")
-                                center_x = (x1 + x2) // 2 + border_left
-                                center_y = (y1 + y2) // 2 + titlebar_height
-                                mouse_click((center_x, center_y), Button.right)
-                                sleep(733, 1234)
-                        sleep(3, 13)
+            while is_running:
+                logger.info("Start fishing...")
+                kb_click(KeyCode.from_char(BTN_FISHING))
+                detect = False
+                start_time = time.time()
+                while is_running and not detect:
+                    if time.time() - start_time > MAX_WAIT_TIME:
+                        logger.error(f"No detection after {MAX_WAIT_TIME} seconds: try again.")
+                        break
+                    img = np.array(sct.grab(window_game))[:, :, :3]
+                    results = model(img, verbose=False)
+                    for box in results[0].boxes:
+                        cls = int(box.cls[0])
+                        conf = float(box.conf[0])
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        if cls == 0 and conf > 0.75:
+                            detect = True
+                            logger.info(f"Detected fish with {conf*100:.0f}%")
+                            center_x = (x1 + x2) // 2 + border_left
+                            center_y = (y1 + y2) // 2 + titlebar_height
+                            mouse_click((center_x, center_y), Button.right)
+                            sleep(733, 1234)
                     sleep(3, 13)
-            except KeyboardInterrupt:
-                pass
-
-def window_get_active_rect():
-  try:
-    hwnd = win32gui.GetForegroundWindow()
-    rect = win32gui.GetWindowRect(hwnd)
-    # win32gui rect = (left, top, right, bot)
-    # transform to (left, top, width, height)
-    left = rect[0]
-    top = rect[1]
-    w = rect[2] - rect[0]
-    h = rect[3] - rect[1]
-    if w < 256:
-      w = 256
-    if h < 128:
-      h = 128
-    out_rect = (left, top, w, h)
-    return out_rect
-  except:
-    time.sleep(1)
-    return (400, 400, 400, 400)
+                sleep(3, 13)
 
 
 # State variable to track if started or stopped
@@ -149,9 +133,19 @@ def main():
                 if thread_worker is not None:
                     thread_worker.join()
                 thread_worker = None
-    with keyboard.Listener(on_press=on_press) as listener:
-        logger.info("Press Backspace to start or stop fishing.")
-        listener.join()
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+    logger.info("Press Backspace to start or stop fishing.")
+    while listener.running:
+        time.sleep(0.01) # enable keyboard interrupts
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received, stopping worker thread.")
+        is_running = False
+        if thread_worker is not None:
+            thread_worker.join()
+        logger.info("Worker thread stopped.")
+        exit(0)
